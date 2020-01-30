@@ -1,0 +1,24 @@
+[package]
+name = "flat-playground-runner"
+version = "0.1.0"
+authors = ["losfair <zhy20000919@hotmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = "1.0"
+serde_derive = "1.0"
+toml = "0.5"
+tokio-tungstenite = "0.9"
+url = "2"
+structopt = "0.3"
+serde_json = "1.0"
+sha2 = "0.8"
+uuid = { version = "0.8", features = ["v4"] }
+tokio = { version = "0.2", features = ["full"] }
+futures = { version = "0.3", features = ["compat", "io-compat"] }
+
+[dependencies.futures_01]
+package = "futures"
+version = "0.1"

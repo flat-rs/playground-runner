@@ -6,7 +6,7 @@ use futures::compat::{Future01CompatExt, Sink01CompatExt, Stream01CompatExt};
 use futures::{sink::SinkExt, stream::StreamExt};
 use futures_01::stream::Stream;
 use std::path::PathBuf;
-use std::process::{Child, Command};
+use std::process::{Child as StdChild, Command as StdCommand};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -31,7 +31,7 @@ struct Confirmation {
 }
 
 struct QemuGuard {
-    qemu: Child,
+    qemu: StdChild,
     qemu_sock: PathBuf,
 }
 
@@ -224,7 +224,7 @@ impl Worker {
 
         drop(std::fs::remove_file(&sockpath));
 
-        let mut child = Command::new("qemu-system-x86_64")
+        let mut child = StdCommand::new("qemu-system-x86_64")
             .args(&args)
             .spawn()
             .map_err(|e| format!("cannot start qemu: {:?}", e))?;

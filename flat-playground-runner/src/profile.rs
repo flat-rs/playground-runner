@@ -4,10 +4,10 @@ use std::{
     fs::{DirBuilder, File},
     io::Read,
     path::{Path, PathBuf},
-    process::Command,
     sync::{Arc, RwLock},
     time::Duration,
 };
+use tokio::process::Command;
 use tokio::time::delay_for;
 
 static ROOT_PROFILE_URL: &'static str = "https://profiles.playground.flat.rs/root_profile.toml";
@@ -72,7 +72,7 @@ impl ProfileManager {
                     .expect("invalid bytes in root profile path"),
                 ROOT_PROFILE_URL,
                 None,
-            ) {
+            ).await {
                 println!("root profile fetch failed: {:?}", e);
                 delay_for(Duration::from_secs(10)).await;
                 continue;
@@ -121,18 +121,21 @@ impl ProfileManager {
             // Prepare resources.
             for prof in &new_profile.profiles {
                 let result = match prof.image {
-                    Image::Iso(ref x) => reuse_or_fetch_resource(&*self.config, x),
+                    Image::Iso(ref x) => reuse_or_fetch_resource(&*self.config, x).await,
                     Image::Multiboot {
                         ref kernel,
                         ref ramdisk,
                         ..
-                    } => reuse_or_fetch_resource(&*self.config, kernel).and_then(|_| {
-                        if let Some(ramdisk) = ramdisk {
-                            reuse_or_fetch_resource(&*self.config, ramdisk)
-                        } else {
-                            Ok(())
+                    } => {
+                        match reuse_or_fetch_resource(&*self.config, kernel).await {
+                            Ok(()) => if let Some(ramdisk) = ramdisk {
+                                reuse_or_fetch_resource(&*self.config, ramdisk).await
+                            } else {
+                                Ok(())
+                            },
+                            Err(e) => Err(e)
                         }
-                    }),
+                    },
                 };
                 match result {
                     Ok(()) => {}
@@ -154,17 +157,17 @@ impl ProfileManager {
     }
 }
 
-fn try_fetch(path: &str, url: &str, sha256: Option<&str>) -> Result<(), String> {
+async fn try_fetch(path: &str, url: &str, sha256: Option<&str>) -> Result<(), String> {
     let tmp_path = format!("{}.tmp", path);
     let status = Command::new("wget")
         .args(&["-O", &tmp_path, url])
-        .status()
+        .status().await
         .expect("cannot execute wget");
     if !status.success() {
         return Err(format!("cannot fetch from {}: {:?}", url, status));
     }
     if let Some(sha256) = sha256 {
-        let real_sha256 = match file_sha256(&tmp_path) {
+        let real_sha256 = match file_sha256(&tmp_path).await {
             Ok(x) => x,
             Err(e) => {
                 drop(std::fs::remove_file(&tmp_path));
@@ -196,7 +199,7 @@ pub fn build_resource_path(config: &Config, sha256: &str) -> PathBuf {
     path
 }
 
-fn reuse_or_fetch_resource(config: &Config, res: &Resource) -> Result<(), String> {
+async fn reuse_or_fetch_resource(config: &Config, res: &Resource) -> Result<(), String> {
     let path = build_resource_path(config, &res.sha256);
     if path.exists() {
         Ok(())
@@ -205,15 +208,15 @@ fn reuse_or_fetch_resource(config: &Config, res: &Resource) -> Result<(), String
             path.to_str().expect("path contains invalid bytes"),
             &res.url,
             Some(&res.sha256),
-        )?;
+        ).await?;
         Ok(())
     }
 }
 
-fn file_sha256(path: &str) -> Result<String, String> {
+async fn file_sha256(path: &str) -> Result<String, String> {
     let output = Command::new("sha256sum")
         .args(&[path])
-        .output()
+        .output().await
         .expect("Cannot execute sha256sum");
     if !output.status.success() {
         return Err(format!("cannot compute sha256 sum at: {}", path));

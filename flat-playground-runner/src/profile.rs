@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::time::delay_for;
 
-static ROOT_PROFILE_URL: &'static str = "http://profiles.playground.flat.rs/root_profile.toml";
+static ROOT_PROFILE_URL: &'static str = "https://profiles.playground.flat.rs/root_profile.toml";
 
 pub struct ProfileManager {
     config: Arc<Config>,

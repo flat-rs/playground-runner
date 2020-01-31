@@ -38,6 +38,7 @@ struct QemuGuard {
 impl Drop for QemuGuard {
     fn drop(&mut self) {
         drop(self.qemu.kill());
+        drop(self.qemu.wait());
         drop(std::fs::remove_file(&self.qemu_sock));
     }
 }
@@ -107,7 +108,7 @@ impl Worker {
             Some(x) => x,
             None => return Err(format!("Cannot find profile: {}", confirmation.profile)),
         };
-        let qemu = self.start_qemu(profile)?;
+        let qemu = self.start_qemu(profile).await?;
         let mut qemu_sock = UnixStream::connect(&qemu.qemu_sock)
             .await
             .map_err(|e| format!("Cannot connect to qemu: {:?}", e))?;
@@ -127,12 +128,13 @@ impl Worker {
                 msg = &mut ws_read => {
                     match msg {
                         None => return Ok(()),
-                        Some(Ok(Message::Binary(x))) => {
-                            qemu_write.write(&x).await
-                                .map_err(|e| format!("cannot send message to qemu: {:?}", e))?;
+                        Some(Ok(Message::Binary(_))) => {
+                            return Err(format!("binary message is not supported"));
                         }
                         Some(Ok(Message::Text(x))) => {
-                            qemu_write.write(x.as_bytes()).await
+                            let decoded = base64::decode(&x)
+                                .map_err(|_| format!("cannot decode as base64"))?;
+                            qemu_write.write(&decoded).await
                                 .map_err(|e| format!("cannot send message to qemu: {:?}", e))?;
                         }
                         Some(Ok(_)) => {},
@@ -145,9 +147,10 @@ impl Worker {
                     match msg {
                         Ok(n) => {
                             if n == 0 {
+                                println!("qemu exited");
                                 return Ok(());
                             }
-                            ws_write.send(Message::Binary(buf[..n].to_vec())).await
+                            ws_write.send(Message::Text(base64::encode(&buf[..n]))).await
                                 .map_err(|e| format!("cannot send message to ws: {:?}", e))?;
                         },
                         Err(e) => return Err(format!("qemu read error: {:?}", e)),
@@ -156,11 +159,13 @@ impl Worker {
             }
         }
     }
-    fn start_qemu(&mut self, profile: &Profile) -> Result<QemuGuard, String> {
+    async fn start_qemu(&mut self, profile: &Profile) -> Result<QemuGuard, String> {
         let mut args: Vec<&str> = vec![
             "--enable-kvm",
             "-m",
             "256M",
+            "-smp",
+            "2",
             "-device",
             "intel-iommu,intremap=on",
             "-machine",
@@ -218,11 +223,29 @@ impl Worker {
         }
 
         drop(std::fs::remove_file(&sockpath));
+
+        let mut child = Command::new("qemu-system-x86_64")
+            .args(&args)
+            .spawn()
+            .map_err(|e| format!("cannot start qemu: {:?}", e))?;
+
+        loop {
+            delay_for(Duration::from_millis(50)).await;
+            if sockpath.exists() {
+                break;
+            }
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    return Err(format!("qemu early exit: {:?}", status));
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    return Err(format!("error on qemu try_wait: {:?}", e));
+                }
+            }
+        }
         Ok(QemuGuard {
-            qemu: Command::new("qemu-system-x86_64")
-                .args(&args)
-                .spawn()
-                .map_err(|e| format!("cannot start qemu: {:?}", e))?,
+            qemu: child,
             qemu_sock: sockpath,
         })
     }

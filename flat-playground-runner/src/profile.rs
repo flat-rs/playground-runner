@@ -72,7 +72,9 @@ impl ProfileManager {
                     .expect("invalid bytes in root profile path"),
                 ROOT_PROFILE_URL,
                 None,
-            ).await {
+            )
+            .await
+            {
                 println!("root profile fetch failed: {:?}", e);
                 delay_for(Duration::from_secs(10)).await;
                 continue;
@@ -126,15 +128,15 @@ impl ProfileManager {
                         ref kernel,
                         ref ramdisk,
                         ..
-                    } => {
-                        match reuse_or_fetch_resource(&*self.config, kernel).await {
-                            Ok(()) => if let Some(ramdisk) = ramdisk {
+                    } => match reuse_or_fetch_resource(&*self.config, kernel).await {
+                        Ok(()) => {
+                            if let Some(ramdisk) = ramdisk {
                                 reuse_or_fetch_resource(&*self.config, ramdisk).await
                             } else {
                                 Ok(())
-                            },
-                            Err(e) => Err(e)
+                            }
                         }
+                        Err(e) => Err(e),
                     },
                 };
                 match result {
@@ -161,7 +163,8 @@ async fn try_fetch(path: &str, url: &str, sha256: Option<&str>) -> Result<(), St
     let tmp_path = format!("{}.tmp", path);
     let status = Command::new("wget")
         .args(&["-O", &tmp_path, url])
-        .status().await
+        .status()
+        .await
         .expect("cannot execute wget");
     if !status.success() {
         return Err(format!("cannot fetch from {}: {:?}", url, status));
@@ -208,7 +211,8 @@ async fn reuse_or_fetch_resource(config: &Config, res: &Resource) -> Result<(), 
             path.to_str().expect("path contains invalid bytes"),
             &res.url,
             Some(&res.sha256),
-        ).await?;
+        )
+        .await?;
         Ok(())
     }
 }
@@ -216,7 +220,8 @@ async fn reuse_or_fetch_resource(config: &Config, res: &Resource) -> Result<(), 
 async fn file_sha256(path: &str) -> Result<String, String> {
     let output = Command::new("sha256sum")
         .args(&[path])
-        .output().await
+        .output()
+        .await
         .expect("Cannot execute sha256sum");
     if !output.status.success() {
         return Err(format!("cannot compute sha256 sum at: {}", path));

@@ -2,7 +2,18 @@
 pub struct Config {
     pub working_directory: String,
     pub api_token: String,
-    pub concurrency: u8,
+    pub api_url: Option<String>,
+    pub num_workers: u8,
+    pub concurrency_per_worker: u8,
+    pub public_url: String,
+    pub port: u16,
+    pub vm_max_inactive_secs: u64,
+}
+
+impl Config {
+    pub fn total_concurrency(&self) -> u16 {
+        (self.num_workers as u16) * (self.concurrency_per_worker as u16)
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Deserialize, Debug)]

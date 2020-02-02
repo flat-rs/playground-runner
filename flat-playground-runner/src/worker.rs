@@ -157,7 +157,12 @@ impl Worker {
     }
 
     async fn run_once(&mut self, vmm_signal: &mut InstanceSignalChannel) -> Result<(), String> {
-        let api_url = self.config.api_url.as_ref().map(|x| x.as_str()).unwrap_or(DEFAULT_API_URL);
+        let api_url = self
+            .config
+            .api_url
+            .as_ref()
+            .map(|x| x.as_str())
+            .unwrap_or(DEFAULT_API_URL);
         let api_url = format!("{}?token={}", api_url, self.config.api_token);
         let parsed_url = Url::parse(&api_url).unwrap();
         let (mut socket, _) = connect_async(parsed_url)
